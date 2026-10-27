@@ -109,16 +109,6 @@ jobs:
           Write-Host "MENU_DIR=$menuDir"
           Get-ChildItem -Path $menuDir -Recurse
 
-          $menuinst = Join-Path $prefix 'Scripts\menuinst.exe'
-          if (-not (Test-Path $menuinst)) {
-            throw "menuinst executable was not found: $menuinst"
-          }
-
-          & $menuinst --prefix $prefix --install
-          if ($LASTEXITCODE -ne 0) {
-            throw 'menuinst failed to install the menu item.'
-          }
-
       - name: Verify generated Windows shortcut
         shell: pwsh
         run: |
@@ -141,3 +131,15 @@ jobs:
           }
 
           Write-Host "Generated shortcut: $($shortcut.FullName)"
+
+          $shell = New-Object -ComObject WScript.Shell
+          $link = $shell.CreateShortcut($shortcut.FullName)
+          Write-Host 'Shortcut content:'
+          [pscustomobject]@{
+            TargetPath       = $link.TargetPath
+            Arguments        = $link.Arguments
+            WorkingDirectory = $link.WorkingDirectory
+            Description      = $link.Description
+            IconLocation     = $link.IconLocation
+            WindowStyle      = $link.WindowStyle
+          } | Format-List
