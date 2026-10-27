@@ -2,6 +2,7 @@ name: Test Windows menuinst metadata
 
 on:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
@@ -48,6 +49,14 @@ jobs:
           set "remote_url=https://github.com/conda-forge/git-feedstock"
           set "sha=e54699ae13510b1b946e9f6ff3ebac8b4613667c"
           call ".scripts\run_win_build.bat"
+
+      - name: Upload built conda package
+        uses: actions/upload-artifact@v4
+        with:
+          name: git-windows-conda-package
+          path: D:\\bld\\**\\git-*.conda
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Install menuinst and inspect generated menu files
         shell: pwsh
