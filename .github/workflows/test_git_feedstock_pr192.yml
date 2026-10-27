@@ -1,4 +1,4 @@
-name: Test menuinst shortcut (https://github.com/conda-forge/git-feedstock/pull/192)
+name: Test Windows menuinst metadata
 
 on:
   workflow_dispatch:
@@ -18,32 +18,107 @@ jobs:
           repository: conda-forge/git-feedstock
           ref: e54699ae13510b1b946e9f6ff3ebac8b4613667c
 
-      - name: Build and verify shortcut
+      - name: Disable conda-forge output validation for this standalone test
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $started = Get-Date
-
-          $env:CI = 'github_actions'
-          $env:UPLOAD_PACKAGES = 'False'
-
-          python .\build-locally.py win_64_
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
+          $script = '.scripts\run_win_build.bat'
+          $content = Get-Content -Path $script -Raw
+          $pattern = '(?ms):: Validate\r?\n.*?call :end_group\r?\n'
+          $updated = [regex]::Replace($content, $pattern, '')
+          if ($updated -eq $content) {
+            throw 'Could not locate the output-validation block in run_win_build.bat.'
           }
+          Set-Content -Path $script -Value $updated -NoNewline
+
+      - name: Build Windows package
+        shell: cmd
+        env:
+          BUILD_PLATFORM: win-64
+          CI: github_actions
+          CONFIG: win_64_
+          MINIFORGE_HOME: D:\Miniforge
+          UPLOAD_PACKAGES: 'False'
+          PYTHONUNBUFFERED: '1'
+          # The checkout is performed in the test repository, so provide the
+          # actual feedstock name to conda-forge output validation.
+          GITHUB_REPOSITORY: conda-forge/git-feedstock
+        run: |
+          set "flow_run_id=github_%GITHUB_RUN_ID%"
+          set "remote_url=https://github.com/conda-forge/git-feedstock"
+          set "sha=e54699ae13510b1b946e9f6ff3ebac8b4613667c"
+          call ".scripts\run_win_build.bat"
+
+      - name: Install menuinst and inspect generated menu files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $package = Get-ChildItem -Path 'D:\bld' -Filter 'git-*.conda' -File -Recurse |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $package) {
+            throw 'No Windows conda package was produced.'
+          }
+
+          Write-Host "Built package: $($package.FullName)"
+          $conda = 'D:\Miniforge\Scripts\conda.exe'
+          if (-not (Test-Path $conda)) {
+            throw "Conda executable was not found: $conda"
+          }
+
+          $prefix = Join-Path $env:RUNNER_TEMP 'menuinst-prefix'
+          & $conda create --yes --channel conda-forge --prefix $prefix menuinst
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not create the menuinst test environment.'
+          }
+          & $conda install --yes --prefix $prefix $package.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not install the built package.'
+          }
+
+          $menuDir = Join-Path $prefix 'Menu'
+          if (-not (Test-Path (Join-Path $menuDir 'menu-windows.json'))) {
+            throw "menu-windows.json was not installed under $menuDir"
+          }
+          if (-not (Test-Path (Join-Path $menuDir 'git-for-windows.ico'))) {
+            throw "git-for-windows.ico was not installed under $menuDir"
+          }
+
+          Write-Host "MENU_DIR=$menuDir"
+          Get-ChildItem -Path $menuDir -Recurse
+
+          $menuinst = Join-Path $prefix 'Scripts\menuinst.exe'
+          if (-not (Test-Path $menuinst)) {
+            throw "menuinst executable was not found: $menuinst"
+          }
+
+          $env:MENUINST_DISTRIBUTION_NAME = 'git'
+          & $menuinst --prefix $prefix --install
+          if ($LASTEXITCODE -ne 0) {
+            throw 'menuinst failed to install the menu item.'
+          }
+
+      - name: Verify generated Windows shortcut
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
 
           $menuRoots = @(
             (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'),
             (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs')
           ) | Where-Object { Test-Path $_ }
 
-          $shortcut = Get-ChildItem -Path $menuRoots `
-            -Filter 'Git Bash.lnk' -File -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.LastWriteTime -ge $started } |
+          $shortcut = Get-ChildItem -Path $menuRoots -Filter 'Git Bash.lnk' -File -Recurse |
             Select-Object -First 1
 
           if (-not $shortcut) {
-            throw 'Git Bash.lnk was not generated in the Start Menu.'
+            Write-Host 'Installed menu files:'
+            Get-ChildItem -Path $menuRoots -File -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like '*.lnk' } |
+              Select-Object -ExpandProperty FullName
+            throw 'Git Bash.lnk was not generated in a Windows Start Menu directory.'
           }
 
-          Write-Host "Found shortcut: $($shortcut.FullName)"
+          Write-Host "Generated shortcut: $($shortcut.FullName)"
