@@ -54,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: git-windows-conda-package
-          path: D:\\bld\\**\\git-*.conda
+          path: C:\bld\**\git-*.conda
           if-no-files-found: error
           retention-days: 7
 
@@ -63,7 +63,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $package = Get-ChildItem -Path 'D:\bld' -Filter 'git-*.conda' -File -Recurse |
+          $package = Get-ChildItem -Path 'C:\bld' -Filter 'git-*.conda' -File -Recurse |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
 
