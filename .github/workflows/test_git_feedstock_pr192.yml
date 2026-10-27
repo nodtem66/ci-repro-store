@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: conda-forge/git-feedstock
-          ref: e54699ae13510b1b946e9f6ff3ebac8b4613667c
+          ref: 185d203ddad5ce5f71660e67d78fa62e4b79c2bd
 
       - name: Disable conda-forge output validation for this standalone test
         shell: pwsh
@@ -46,7 +46,7 @@ jobs:
         run: |
           set "flow_run_id=github_%GITHUB_RUN_ID%"
           set "remote_url=https://github.com/conda-forge/git-feedstock"
-          set "sha=e54699ae13510b1b946e9f6ff3ebac8b4613667c"
+          set "sha=185d203ddad5ce5f71660e67d78fa62e4b79c2bd"
           call ".scripts\run_win_build.bat"
 
       - name: Upload built conda package
