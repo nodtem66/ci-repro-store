@@ -1,0 +1,49 @@
+name: Test menuinst shortcut (https://github.com/conda-forge/git-feedstock/pull/192)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-menuinst:
+    runs-on: windows-2022
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out feedstock commit
+        uses: actions/checkout@v4
+        with:
+          repository: conda-forge/git-feedstock
+          ref: e54699ae13510b1b946e9f6ff3ebac8b4613667c
+
+      - name: Build and verify shortcut
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $started = Get-Date
+
+          $env:CI = 'github_actions'
+          $env:UPLOAD_PACKAGES = 'False'
+
+          python .\build-locally.py win_64_
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $menuRoots = @(
+            (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'),
+            (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs')
+          ) | Where-Object { Test-Path $_ }
+
+          $shortcut = Get-ChildItem -Path $menuRoots `
+            -Filter 'Git Bash.lnk' -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -ge $started } |
+            Select-Object -First 1
+
+          if (-not $shortcut) {
+            throw 'Git Bash.lnk was not generated in the Start Menu.'
+          }
+
+          Write-Host "Found shortcut: $($shortcut.FullName)"
