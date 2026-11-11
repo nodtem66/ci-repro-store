@@ -9,6 +9,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
+          #- config: osx_64_
+          #  runner: macos-15-intel
           - config: osx_arm64_
             runner: macos-15
 
@@ -27,136 +29,138 @@ jobs:
       - name: Create standalone build inputs
         shell: bash
         run: |
-           cat > recipe.yaml <<'RECIPE'
-           schema_version: 1
+          cat > recipe.yaml <<'RECIPE'
+          schema_version: 1
 
-           context:
-             name: gitea
-             version: "28.3.0"
-             
-           package:
-             name: {{ name|lower }}
-             version: {{ version }}
+          context:
+            name: gitea
+            version: "28.3.0"
 
-           source:
-             url: https://github.com/go-gitea/__RATTLER_EXPR_OPEN__ name }}/archive/v__RATTLER_EXPR_OPEN__ version }}.tar.gz
-             sha256: c2060e8ccf89c07764f834d2e96a3fdbd3d2f203cd49b99415ab1fd827192e56
+          package:
+            name: __RATTLER_EXPR_OPEN__ name|lower }}
+            version: __RATTLER_EXPR_OPEN__ version }}
 
-           build:
-             number: 0
-             skip: win
+          source:
+            url: https://github.com/go-gitea/__RATTLER_EXPR_OPEN__ name }}/archive/v__RATTLER_EXPR_OPEN__ version }}.tar.gz
+            sha256: c2060e8ccf89c07764f834d2e96a3fdbd3d2f203cd49b99415ab1fd827192e56
 
-           requirements:
-             build:
-               - {{ compiler('cgo') }} 1.27.*
-               - {{ compiler('c') }}
-               - {{ stdlib("c") }}
-               - if: not win
-                 then: file
-               - go-licenses
-               - make
-               - nodejs >=20
-               - pnpm
-             run:
-               - git
+          build:
+            number: 0
+            skip: win
 
-           tests:
-             - script:
-                 - gitea --version
-                 - gitea --help
+          requirements:
+            build:
+              - __RATTLER_EXPR_OPEN__ compiler('cgo') }} 1.27.*
+              - __RATTLER_EXPR_OPEN__ compiler('c') }}
+              - __RATTLER_EXPR_OPEN__ stdlib("c") }}
+              - if: not win
+                then: file
+              - go-licenses
+              - make
+              - nodejs >=20
+              - pnpm
+            run:
+              - git
 
-           about:
-             license: MIT
-             license_file:
-               - LICENSE
-               - license-files/
-             summary: Git with a cup of tea
-             description: |
-               The goal of this project is to make the easiest, fastest, and most
-               painless way of setting up a self-hosted Git service.
-             homepage: https://about.gitea.com
-             repository: https://github.com/go-gitea/gitea
-             documentation: https://docs.gitea.com
-            RECIPE
+          tests:
+            - script:
+                - gitea --version
+                - gitea --help
 
-            cat > conda_build_config.yaml <<'CONFIG'
-            c_stdlib_version:         # [osx]
-              - "13.0"                # [osx]
-            CONFIG
+          about:
+            license: MIT
+            license_file:
+              - LICENSE
+              - license-files/
+            summary: Git with a cup of tea
+            description: |
+              The goal of this project is to make the easiest, fastest, and most
+              painless way of setting up a self-hosted Git service.
+            homepage: https://about.gitea.com
+            repository: https://github.com/go-gitea/gitea
+            documentation: https://docs.gitea.com
+          RECIPE
 
-            cat > build.sh <<'BUILD'
-            #!/bin/sh
-            set -eux
-            
-            env | sort
-            go env CC CGO_CFLAGS CGO_ENABLED GOARCH GOOS GOFLAGS
-            
-            unset LDFLAGS
-            echo "$PKG_VERSION" > VERSION
+          cat > conda_build_config.yaml <<'CONFIG'
+          MACOSX_DEPLOYMENT_TARGET: # [osx]
+            - "13.0"                # [osx]
+          c_stdlib_version:         # [osx]
+            - "13.0"                # [osx]
+          CONFIG
 
-            export TAGS="bindata timetzdata"
-            make frontend
-            rm -rf Library/pnpm
-            make generate-backend
-            make gitea
+          cat > build.sh <<'BUILD'
+          #!/bin/sh
+          set -eux
 
-            mkdir -p "$PREFIX/bin"
-            cp gitea "$PREFIX/bin/gitea"
-            
-            go-licenses save . --save_path=./license-files || true
-            test -d license-files/github.com
-            BUILD
+          env | sort
+          go env CC CGO_CFLAGS CGO_ENABLED GOARCH GOOS GOFLAGS
 
-            cat > osx_64_.yaml <<'CONFIG'
-            MACOSX_SDK_VERSION:
-              - '11.0'
-            c_compiler:
-              - clang
-            c_compiler_version:
-              - '21'
-            c_stdlib:
-              - macosx_deployment_target
-            c_stdlib_version:
-              - '11.0'
-            cgo_compiler:
-              - go-cgo
-            channel_sources:
-              - conda-forge
-            channel_targets:
-              - conda-forge main
-            macos_machine:
-              - x86_64-apple-darwin13.4.0
-            target_platform:
-              - osx-64
-            CONFIG
+          unset LDFLAGS
+          echo "$PKG_VERSION" > VERSION
 
-           cat > osx_arm64_.yaml <<'CONFIG'
-           MACOSX_SDK_VERSION:
-             - '11.0'
-           c_compiler:
-             - clang
-           c_compiler_version:
-             - '21'
-           c_stdlib:
-             - macosx_deployment_target
-           c_stdlib_version:
-             - '11.0'
-           cgo_compiler:
-             - go-cgo
-           channel_sources:
-             - conda-forge
-           channel_targets:
-             - conda-forge main
-           macos_machine:
-             - arm64-apple-darwin20.0.0
-           target_platform:
-             - osx-arm64
-           CONFIG
-             
+          export TAGS="bindata timetzdata"
+          make frontend
+          rm -rf Library/pnpm
+          make generate-backend
+          make gitea
+
+          mkdir -p "$PREFIX/bin"
+          cp gitea "$PREFIX/bin/gitea"
+
+          go-licenses save . --save_path=./license-files || true
+          test -d license-files/github.com
+          BUILD
+
+          cat > osx_64_.yaml <<'CONFIG'
+          MACOSX_SDK_VERSION:
+            - '11.0'
+          c_compiler:
+            - clang
+          c_compiler_version:
+            - '21'
+          c_stdlib:
+            - macosx_deployment_target
+          c_stdlib_version:
+            - '11.0'
+          cgo_compiler:
+            - go-cgo
+          channel_sources:
+            - conda-forge
+          channel_targets:
+            - conda-forge main
+          macos_machine:
+            - x86_64-apple-darwin13.4.0
+          target_platform:
+            - osx-64
+          CONFIG
+
+          cat > osx_arm64_.yaml <<'CONFIG'
+          MACOSX_SDK_VERSION:
+            - '11.0'
+          c_compiler:
+            - clang
+          c_compiler_version:
+            - '21'
+          c_stdlib:
+            - macosx_deployment_target
+          c_stdlib_version:
+            - '11.0'
+          cgo_compiler:
+            - go-cgo
+          channel_sources:
+            - conda-forge
+          channel_targets:
+            - conda-forge main
+          macos_machine:
+            - arm64-apple-darwin20.0.0
+          target_platform:
+            - osx-arm64
+          CONFIG
+
+          python -c 'from pathlib import Path; p=Path("recipe.yaml"); p.write_text(p.read_text().replace("__RATTLER_EXPR_OPEN__", chr(36) + chr(123)*2))'
+
       - name: Build recipe
         shell: bash -el {0}
         run: |
           conda install -y rattler-build
-          echo "${{ matrix.config }}.yaml"
-          ls -la ./
           rattler-build build -r . -m "${{ matrix.config }}.yaml"
