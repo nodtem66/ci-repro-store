@@ -157,4 +157,6 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -y rattler-build
+          echo "${{ matrix.config }}.yaml"
+          ls -la ./
           rattler-build build -r . -m "${{ matrix.config }}.yaml"
