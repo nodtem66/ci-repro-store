@@ -87,7 +87,9 @@ jobs:
           RECIPE
 
           cat > conda_build_config.yaml <<'CONFIG'
-          MACOSX_DEPLOYMENT_TARGET: # [osx]
+          MACOSX_SDK_VERSION:       # [osx]
+            - "13.0"                # [osx]
+          c_stdlib_version:         # [osx]
             - "13.0"                # [osx]
           CONFIG
 
@@ -155,6 +157,20 @@ jobs:
             - arm64-apple-darwin20.0.0
           target_platform:
             - osx-arm64
+          CONFIG
+
+          cat > conda-forge.yml <<'CONFIG'
+          build_platform:
+            linux_aarch64: linux_64
+            osx_arm64: osx_64
+          conda_forge_output_validation: false
+          github:
+            branch_name: main
+            tooling_branch_name: main
+          conda_build:
+            pkg_format: '2'
+          test: native_and_emulated
+          conda_build_tool: rattler-build
           CONFIG
 
           python -c 'from pathlib import Path; p=Path("recipe.yaml"); p.write_text(p.read_text().replace("__RATTLER_EXPR_OPEN__", chr(36) + chr(123)*2))'
