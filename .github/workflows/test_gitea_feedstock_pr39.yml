@@ -13,18 +13,24 @@ jobs:
           #  runner: macos-15-intel
           - config: osx_arm64_
             runner: macos-15
-
+            
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
 
     steps:
       - name: Set up conda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           miniforge-version: latest
           activate-environment: rattler
+          conda-solver: libmamba
           channels: conda-forge
           channel-priority: strict
+          python-version: 3.14
+      - name: Install rattler-build
+        shell: bash -el {0}
+        run: |
+          conda install -y rattler-build conda-forge-ci-setup=4
 
       - name: Create standalone build inputs
         shell: bash
@@ -71,7 +77,6 @@ jobs:
             license: MIT
             license_file:
               - LICENSE
-              - license-files/
             summary: Git with a cup of tea
             description: |
               The goal of this project is to make the easiest, fastest, and most
@@ -83,8 +88,6 @@ jobs:
 
           cat > conda_build_config.yaml <<'CONFIG'
           MACOSX_DEPLOYMENT_TARGET: # [osx]
-            - "13.0"                # [osx]
-          c_stdlib_version:         # [osx]
             - "13.0"                # [osx]
           CONFIG
 
@@ -106,9 +109,6 @@ jobs:
 
           mkdir -p "$PREFIX/bin"
           cp gitea "$PREFIX/bin/gitea"
-
-          go-licenses save . --save_path=./license-files || true
-          test -d license-files/github.com
           BUILD
 
           cat > osx_64_.yaml <<'CONFIG'
@@ -159,8 +159,101 @@ jobs:
 
           python -c 'from pathlib import Path; p=Path("recipe.yaml"); p.write_text(p.read_text().replace("__RATTLER_EXPR_OPEN__", chr(36) + chr(123)*2))'
 
-      - name: Build recipe
+      - name: Build recipe # Ref: .script/run_osx_build.sh
         shell: bash -el {0}
         run: |
-          conda install -y rattler-build
-          rattler-build build -r . -m "${{ matrix.config }}.yaml"
+          export CI=github_actions
+          export FEEDSTOCK_NAME=gitea-feedstock
+          export GIT_BRANCH=test
+          export MINIFORGE_HOME=~/miniforge3
+          export CONDA_BLD_PATH=${MINIFORGE_HOME}/conda-bld
+          export OSX_FORCE_SDK_DOWNLOAD="1"
+          export FEEDSTOCK_ROOT=${PWD}
+          export RECIPE_ROOT=$(pwd)
+          export CONFIG_FILE="${{ matrix.config }}.yaml"
+                    
+          function startgroup {
+              case ${CI:-} in
+                  azure )
+                      echo "##[group]$1";;
+                  github_actions )
+                      echo "::group::$1";;
+                  * )
+                      echo "$1";;
+              esac
+          } 2> /dev/null
+          
+          function endgroup {
+              # End a foldable group of log lines
+              # Pass a single argument, quoted
+          
+              case ${CI:-} in
+                  azure )
+                      echo "##[endgroup]";;
+                  github_actions )
+                      echo "::endgroup::";;
+              esac
+          } 2> /dev/null
+
+          arch=$(uname -m)
+          if [[ "${arch}" == "x86_64" ]]; then
+            arch="64"
+          fi
+          source "${MINIFORGE_HOME}/etc/profile.d/conda.sh"
+          export CONDA_SOLVER="libmamba"
+          export CONDA_LIBMAMBA_SOLVER_NO_CHANNELS_FROM_INSTALLED=1
+
+          echo Setting up configuration
+          setup_conda_rc "${FEEDSTOCK_ROOT}" "${RECIPE_ROOT}" "${CONFIG_FILE}"
+          
+          # macOS-specific setup
+          if [[ "${CI:-}" != "" ]]; then
+              mangle_compiler "${FEEDSTOCK_ROOT}" "${RECIPE_ROOT}" "${CONFIG_FILE}"
+          fi
+          
+          if [[ "${CI:-}" != "" ]]; then
+              echo "Mangling homebrew in the CI to avoid conflicts."
+              /usr/bin/sudo mangle_homebrew
+              /usr/bin/sudo -k
+          else
+              echo "Not mangling homebrew as we are not running in CI"
+          fi
+
+          if [[ "${OSX_SDK_DIR:-}" == "" ]]; then
+              if [[ "${CI:-}" == "" ]]; then
+                  echo "Please set OSX_SDK_DIR to a directory where SDKs can be downloaded to. Aborting"
+                  exit 1
+              else
+                  export OSX_SDK_DIR=/opt/conda-sdks
+                  /usr/bin/sudo mkdir -p "${OSX_SDK_DIR}"
+                  /usr/bin/sudo chown "${USER}" "${OSX_SDK_DIR}"
+              fi
+          else
+              if tmpf=$(mktemp "$OSX_SDK_DIR"/tmp.XXXXXXXX 2>/dev/null); then
+                  rm -f "$tmpf"
+                  echo "OSX_SDK_DIR is writeable without sudo, continuing"
+              else
+                  echo "User-provided OSX_SDK_DIR is not writeable for current user! Aborting"
+                  exit 1
+              fi
+          fi
+
+          echo Running build setup
+          source run_conda_forge_build_setup
+
+          if [[ "${HOST_PLATFORM}" != "${BUILD_PLATFORM}" ]] && [[ "${BUILD_WITH_CONDA_DEBUG:-0}" != 1 ]]; then
+              EXTRA_CB_OPTIONS="${EXTRA_CB_OPTIONS:-} --test skip"
+          fi
+
+          ( endgroup "Configuring conda" ) 2> /dev/null
+          
+          echo Building recipe
+          
+          rattler-build build \
+              --recipe "${RECIPE_ROOT}" \
+              -m "${CONFIG_FILE}" \
+              ${EXTRA_CB_OPTIONS:-} \
+              --build-platform "${BUILD_PLATFORM}" \
+              --target-platform "${HOST_PLATFORM}" \
+          
+          ( startgroup "Inspecting artifacts" ) 2> /dev/null
