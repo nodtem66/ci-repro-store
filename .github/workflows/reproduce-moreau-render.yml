@@ -1,0 +1,58 @@
+name: Reproduce moreau feedstock render
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staged-recipes
+        uses: actions/checkout@v4
+        with:
+          repository: conda-forge/staged-recipes
+          path: staged-recipes
+
+      - name: Check out admin-requests
+        uses: actions/checkout@v4
+        with:
+          repository: conda-forge/admin-requests
+          path: admin-requests
+
+      - name: Set up admin-requests environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: admin-requests/environment.yml
+          cache-environment: true
+
+      - name: Initialize and rerender temporary feedstock
+        shell: bash -el {0}
+        env:
+          FEEDSTOCK_DIR: ${{ runner.temp }}/moreau-feedstock
+        run: |
+          set -euxo pipefail
+          conda-smithy init \
+            staged-recipes/recipes/moreau \
+            --feedstock-directory "$FEEDSTOCK_DIR"
+          conda-smithy rerender --no-check-uptodate \
+            --feedstock_directory "$FEEDSTOCK_DIR"
+
+      - name: Parse outputs from generated variants
+        shell: bash -el {0}
+        env:
+          FEEDSTOCK_DIR: ${{ runner.temp }}/moreau-feedstock
+        run: |
+          python -c '
+          from conda_forge_feedstock_ops.parse_package_and_feedstock_names import parse_package_and_feedstock_names
+          print(parse_package_and_feedstock_names("'"$FEEDSTOCK_DIR"'", use_container=False))
+          '
+
+      - name: Save generated variants for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moreau-feedstock-render
+          path: |
+            ${{ runner.temp }}/moreau-feedstock/.ci_support/
+            ${{ runner.temp }}/moreau-feedstock/conda-forge.yml
+          if-no-files-found: warn
