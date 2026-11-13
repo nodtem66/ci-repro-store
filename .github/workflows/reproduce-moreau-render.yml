@@ -60,3 +60,4 @@ jobs:
             ${{ runner.temp }}/moreau-feedstock/.ci_support/
             ${{ runner.temp }}/moreau-feedstock/conda-forge.yml
           if-no-files-found: warn
+          include-hidden-files: true
