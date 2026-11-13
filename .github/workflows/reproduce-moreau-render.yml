@@ -7,6 +7,10 @@ jobs:
   reproduce:
     runs-on: ubuntu-latest
     steps:
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Check out staged-recipes
         uses: actions/checkout@v4
         with:
