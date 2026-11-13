@@ -41,6 +41,10 @@ jobs:
           conda-smithy rerender --no-check-uptodate \
             --feedstock_directory "$FEEDSTOCK_DIR"
 
+      - name: Install output parser
+        shell: bash -el {0}
+        run: micromamba install -n cf -c conda-forge conda-forge-feedstock-ops
+
       - name: Parse outputs from generated variants
         shell: bash -el {0}
         env:
